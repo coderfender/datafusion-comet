@@ -479,6 +479,52 @@ class CometExpressionSuite extends CometTestBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("ANSI support for integral divide (division by zero)") {
+    //    TODO : Support ANSI mode in Integral divide
+    val data = Seq((Integer.MIN_VALUE, 0))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withParquetTable(data, "tbl") {
+        val res = spark.sql("""
+                              |SELECT
+                              |  _1 div _2
+                              |  from tbl
+                              |  """.stripMargin)
+
+        checkSparkMaybeThrows(res) match {
+          case (Some(sparkExc), Some(cometExc)) =>
+            val cometErrorPattern =
+              """[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead"""
+            assert(cometExc.getMessage.contains(cometErrorPattern))
+            assert(sparkExc.getMessage.contains("Division by zero"))
+          case _ => fail("Exception should be thrown")
+        }
+      }
+    }
+  }
+
+  test("ANSI support for remainder (division by zero)") {
+    //    TODO : Support ANSI mode in Integral divide
+    val data = Seq((Integer.MIN_VALUE, 0))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withParquetTable(data, "tbl") {
+        val res = spark.sql("""
+                              |SELECT
+                              |  mod(_1,_2)
+                              |  from tbl
+                              |  """.stripMargin)
+
+        checkSparkMaybeThrows(res) match {
+          case (Some(sparkExc), Some(cometExc)) =>
+            val cometErrorPattern =
+              """[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead"""
+            assert(cometExc.getMessage.contains(cometErrorPattern))
+            assert(sparkExc.getMessage.contains("Division by zero"))
+          case _ => fail("Exception should be thrown")
+        }
+      }
+    }
+  }
+
   test("Verify coalesce performs lazy evaluation") {
     val data = Seq((Integer.MAX_VALUE, 9999999999999L))
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {

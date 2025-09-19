@@ -180,18 +180,11 @@ object CometDivide extends CometExpressionSerde[Divide] with MathBase {
 
 object CometIntegralDivide extends CometExpressionSerde[IntegralDivide] with MathBase {
 
-  override def getSupportLevel(expr: IntegralDivide): SupportLevel = {
-    if (expr.evalMode == EvalMode.ANSI) {
-      Incompatible(Some("ANSI mode is not supported"))
-    } else {
-      Compatible(None)
-    }
-  }
-
   override def convert(
       expr: IntegralDivide,
       inputs: Seq[Attribute],
       binding: Boolean): Option[ExprOuterClass.Expr] = {
+
     if (!supportedDataType(expr.left.dataType)) {
       withInfo(expr, s"Unsupported datatype ${expr.left.dataType}")
       return None
@@ -251,14 +244,6 @@ object CometIntegralDivide extends CometExpressionSerde[IntegralDivide] with Mat
 }
 
 object CometRemainder extends CometExpressionSerde[Remainder] with MathBase {
-
-  override def getSupportLevel(expr: Remainder): SupportLevel = {
-    if (expr.evalMode == EvalMode.ANSI) {
-      Incompatible(Some("ANSI mode is not supported"))
-    } else {
-      Compatible(None)
-    }
-  }
 
   override def convert(
       expr: Remainder,

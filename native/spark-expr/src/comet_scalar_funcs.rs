@@ -136,10 +136,12 @@ pub fn create_comet_physical_fun_with_eval_mode(
             make_comet_scalar_udf!("decimal_div", spark_decimal_div, data_type)
         }
         "decimal_integral_div" => {
+            let is_ansi_div = eval_mode == EvalMode::Ansi;
             make_comet_scalar_udf!(
                 "decimal_integral_div",
                 spark_decimal_integral_div,
-                data_type
+                data_type,
+                is_ansi_div
             )
         }
         "checked_add" => {
