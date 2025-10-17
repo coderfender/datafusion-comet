@@ -22,6 +22,7 @@ mod covariance;
 mod stddev;
 mod sum_decimal;
 mod variance;
+mod sum_int;
 
 pub use avg::Avg;
 pub use avg_decimal::AvgDecimal;
