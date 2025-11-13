@@ -1464,4 +1464,334 @@ class CometAggregateSuite extends CometTestBase with AdaptiveSparkPlanHelper {
     sparkPlan.collect { case s: CometHashAggregateExec => s }.size
   }
 
+  // Utility method to convert TPC-DS .dat files to Parquet once
+  private def generateTPCDSParquetFiles(): Unit = {
+    val datFilesPath = "/tmp/tpcds-test"
+    val parquetPath = "/tmp/tpcds-test-parquet"
+
+    import org.apache.spark.sql.types._
+    val webSalesSchema = StructType(
+      Array(
+        StructField("ws_sold_date_sk", IntegerType),
+        StructField("ws_sold_time_sk", IntegerType),
+        StructField("ws_ship_date_sk", IntegerType),
+        StructField("ws_item_sk", IntegerType),
+        StructField("ws_bill_customer_sk", IntegerType),
+        StructField("ws_bill_cdemo_sk", IntegerType),
+        StructField("ws_bill_hdemo_sk", IntegerType),
+        StructField("ws_bill_addr_sk", IntegerType),
+        StructField("ws_ship_customer_sk", IntegerType),
+        StructField("ws_ship_cdemo_sk", IntegerType),
+        StructField("ws_ship_hdemo_sk", IntegerType),
+        StructField("ws_ship_addr_sk", IntegerType),
+        StructField("ws_web_page_sk", IntegerType),
+        StructField("ws_web_site_sk", IntegerType),
+        StructField("ws_ship_mode_sk", IntegerType),
+        StructField("ws_warehouse_sk", IntegerType),
+        StructField("ws_promo_sk", IntegerType),
+        StructField("ws_order_number", IntegerType),
+        StructField("ws_quantity", IntegerType),
+        StructField("ws_wholesale_cost", DecimalType(7, 2)),
+        StructField("ws_list_price", DecimalType(7, 2)),
+        StructField("ws_sales_price", DecimalType(7, 2)),
+        StructField("ws_ext_discount_amt", DecimalType(7, 2)),
+        StructField("ws_ext_sales_price", DecimalType(7, 2)),
+        StructField("ws_ext_wholesale_cost", DecimalType(7, 2)),
+        StructField("ws_ext_list_price", DecimalType(7, 2)),
+        StructField("ws_ext_tax", DecimalType(7, 2)),
+        StructField("ws_coupon_amt", DecimalType(7, 2)),
+        StructField("ws_ext_ship_cost", DecimalType(7, 2)),
+        StructField("ws_net_paid", DecimalType(7, 2)),
+        StructField("ws_net_paid_inc_tax", DecimalType(7, 2)),
+        StructField("ws_net_paid_inc_ship", DecimalType(7, 2)),
+        StructField("ws_net_paid_inc_ship_tax", DecimalType(7, 2)),
+        StructField("ws_net_profit", DecimalType(7, 2))))
+
+    val webReturnsSchema = StructType(
+      Array(
+        StructField("wr_returned_date_sk", IntegerType),
+        StructField("wr_returned_time_sk", IntegerType),
+        StructField("wr_item_sk", IntegerType),
+        StructField("wr_refunded_customer_sk", IntegerType),
+        StructField("wr_refunded_cdemo_sk", IntegerType),
+        StructField("wr_refunded_hdemo_sk", IntegerType),
+        StructField("wr_refunded_addr_sk", IntegerType),
+        StructField("wr_returning_customer_sk", IntegerType),
+        StructField("wr_returning_cdemo_sk", IntegerType),
+        StructField("wr_returning_hdemo_sk", IntegerType),
+        StructField("wr_returning_addr_sk", IntegerType),
+        StructField("wr_web_page_sk", IntegerType),
+        StructField("wr_reason_sk", IntegerType),
+        StructField("wr_order_number", IntegerType),
+        StructField("wr_return_quantity", IntegerType),
+        StructField("wr_return_amt", DecimalType(7, 2)),
+        StructField("wr_return_tax", DecimalType(7, 2)),
+        StructField("wr_return_amt_inc_tax", DecimalType(7, 2)),
+        StructField("wr_fee", DecimalType(7, 2)),
+        StructField("wr_return_ship_cost", DecimalType(7, 2)),
+        StructField("wr_refunded_cash", DecimalType(7, 2)),
+        StructField("wr_reversed_charge", DecimalType(7, 2)),
+        StructField("wr_account_credit", DecimalType(7, 2)),
+        StructField("wr_net_loss", DecimalType(7, 2))))
+
+    val dateDimSchema = StructType(
+      Array(
+        StructField("d_date_sk", IntegerType),
+        StructField("d_date_id", StringType),
+        StructField("d_date", DateType),
+        StructField("d_month_seq", IntegerType),
+        StructField("d_week_seq", IntegerType),
+        StructField("d_quarter_seq", IntegerType),
+        StructField("d_year", IntegerType),
+        StructField("d_dow", IntegerType),
+        StructField("d_moy", IntegerType),
+        StructField("d_dom", IntegerType),
+        StructField("d_qoy", IntegerType),
+        StructField("d_fy_year", IntegerType),
+        StructField("d_fy_quarter_seq", IntegerType),
+        StructField("d_fy_week_seq", IntegerType),
+        StructField("d_day_name", StringType),
+        StructField("d_quarter_name", StringType),
+        StructField("d_holiday", StringType),
+        StructField("d_weekend", StringType),
+        StructField("d_following_holiday", StringType),
+        StructField("d_first_dom", IntegerType),
+        StructField("d_last_dom", IntegerType),
+        StructField("d_same_day_ly", IntegerType),
+        StructField("d_same_day_lq", IntegerType),
+        StructField("d_current_day", StringType),
+        StructField("d_current_week", StringType),
+        StructField("d_current_month", StringType),
+        StructField("d_current_quarter", StringType),
+        StructField("d_current_year", StringType)))
+
+    val customerAddressSchema = StructType(
+      Array(
+        StructField("ca_address_sk", IntegerType),
+        StructField("ca_address_id", StringType),
+        StructField("ca_street_number", StringType),
+        StructField("ca_street_name", StringType),
+        StructField("ca_street_type", StringType),
+        StructField("ca_suite_number", StringType),
+        StructField("ca_city", StringType),
+        StructField("ca_county", StringType),
+        StructField("ca_state", StringType),
+        StructField("ca_zip", StringType),
+        StructField("ca_country", StringType),
+        StructField("ca_gmt_offset", DecimalType(5, 2)),
+        StructField("ca_location_type", StringType)))
+
+    val webSiteSchema = StructType(
+      Array(
+        StructField("web_site_sk", IntegerType),
+        StructField("web_site_id", StringType),
+        StructField("web_rec_start_date", DateType),
+        StructField("web_rec_end_date", DateType),
+        StructField("web_name", StringType),
+        StructField("web_open_date_sk", IntegerType),
+        StructField("web_close_date_sk", IntegerType),
+        StructField("web_class", StringType),
+        StructField("web_manager", StringType),
+        StructField("web_mkt_id", IntegerType),
+        StructField("web_mkt_class", StringType),
+        StructField("web_mkt_desc", StringType),
+        StructField("web_market_manager", StringType),
+        StructField("web_company_id", IntegerType),
+        StructField("web_company_name", StringType),
+        StructField("web_street_number", StringType),
+        StructField("web_street_name", StringType),
+        StructField("web_street_type", StringType),
+        StructField("web_suite_number", StringType),
+        StructField("web_city", StringType),
+        StructField("web_county", StringType),
+        StructField("web_state", StringType),
+        StructField("web_zip", StringType),
+        StructField("web_country", StringType),
+        StructField("web_gmt_offset", DecimalType(5, 2)),
+        StructField("web_tax_percentage", DecimalType(5, 2))))
+
+    println("Converting web_sales.dat to Parquet...")
+    spark.read
+      .option("delimiter", "|")
+      .schema(webSalesSchema)
+      .csv(s"$datFilesPath/web_sales.dat")
+      .write
+      .mode("overwrite")
+      .parquet(s"$parquetPath/web_sales")
+
+    println("Converting web_returns.dat to Parquet...")
+    spark.read
+      .option("delimiter", "|")
+      .schema(webReturnsSchema)
+      .csv(s"$datFilesPath/web_returns.dat")
+      .write
+      .mode("overwrite")
+      .parquet(s"$parquetPath/web_returns")
+
+    println("Converting date_dim.dat to Parquet...")
+    spark.read
+      .option("delimiter", "|")
+      .schema(dateDimSchema)
+      .csv(s"$datFilesPath/date_dim.dat")
+      .write
+      .mode("overwrite")
+      .parquet(s"$parquetPath/date_dim")
+
+    println("Converting customer_address.dat to Parquet...")
+    spark.read
+      .option("delimiter", "|")
+      .schema(customerAddressSchema)
+      .csv(s"$datFilesPath/customer_address.dat")
+      .write
+      .mode("overwrite")
+      .parquet(s"$parquetPath/customer_address")
+
+    println("Converting web_site.dat to Parquet...")
+    spark.read
+      .option("delimiter", "|")
+      .schema(webSiteSchema)
+      .csv(s"$datFilesPath/web_site.dat")
+      .write
+      .mode("overwrite")
+      .parquet(s"$parquetPath/web_site")
+
+    println("Parquet conversion complete!")
+  }
+
+  test("generate TPC-DS Parquet files") {
+    generateTPCDSParquetFiles()
+  }
+
+  test("q95 exact: TPC-DS q95 with real SF-1 data") {
+    val parquetPath = "/tmp/tpcds-test-parquet"
+
+    withSQLConf(
+      CometConf.COMET_ENABLED.key -> "true",
+      CometConf.COMET_EXEC_ENABLED.key -> "true",
+      CometConf.COMET_EXEC_SHUFFLE_ENABLED.key -> "true",
+      CometConf.COMET_ONHEAP_MEMORY_OVERHEAD.key -> "4294967296", // 4GB
+      CometConf.COMET_BATCH_SIZE.key -> "4096",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10485760",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+
+      // Read from Parquet with limit (adjust as needed)
+      val rowLimit = 100000000
+
+      spark.read
+        .parquet(s"$parquetPath/web_sales")
+        .limit(rowLimit)
+        .createOrReplaceTempView("web_sales")
+      spark.read
+        .parquet(s"$parquetPath/web_returns")
+        .limit(rowLimit)
+        .createOrReplaceTempView("web_returns")
+      spark.read
+        .parquet(s"$parquetPath/date_dim")
+        .limit(rowLimit)
+        .createOrReplaceTempView("date_dim")
+      spark.read
+        .parquet(s"$parquetPath/customer_address")
+        .limit(rowLimit)
+        .createOrReplaceTempView("customer_address")
+      spark.read.parquet(s"$parquetPath/web_site").createOrReplaceTempView("web_site")
+
+      // Exact q95 query from TPC-DS suite
+      val query = """
+        |WITH ws_wh AS
+        |(SELECT
+        |    ws1.ws_order_number,
+        |    ws1.ws_warehouse_sk wh1,
+        |    ws2.ws_warehouse_sk wh2
+        |  FROM web_sales ws1, web_sales ws2
+        |  WHERE ws1.ws_order_number = ws2.ws_order_number
+        |    AND ws1.ws_warehouse_sk <> ws2.ws_warehouse_sk)
+        |SELECT
+        |  count(DISTINCT ws_order_number) AS `order count `,
+        |  sum(ws_ext_ship_cost) AS `total shipping cost `,
+        |  sum(ws_net_profit) AS `total net profit `
+        |FROM
+        |  web_sales ws1, date_dim, customer_address, web_site
+        |WHERE
+        |  d_date BETWEEN '1999-02-01' AND
+        |  (CAST('1999-02-01' AS DATE) + INTERVAL 60 DAY)
+        |    AND ws1.ws_ship_date_sk = d_date_sk
+        |    AND ws1.ws_ship_addr_sk = ca_address_sk
+        |    AND ca_state = 'IL'
+        |    AND ws1.ws_web_site_sk = web_site_sk
+        |    AND web_company_name = 'pri'
+        |    AND ws1.ws_order_number IN (SELECT ws_order_number
+        |  FROM ws_wh)
+        |    AND ws1.ws_order_number IN (SELECT wr_order_number
+        |  FROM web_returns, ws_wh
+        |  WHERE wr_order_number = ws_wh.ws_order_number)
+        |ORDER BY count(DISTINCT ws_order_number)
+        |LIMIT 100
+        |""".stripMargin
+
+      val df = sql(query)
+      df.show(10, false)
+      checkSparkAnswer(df)
+    }
+  }
+
+  test("q95-like: count(DISTINCT) with sum() and broadcast join") {
+    withSQLConf(
+      CometConf.COMET_ENABLED.key -> "true",
+      CometConf.COMET_EXEC_ENABLED.key -> "true",
+      CometConf.COMET_EXEC_SHUFFLE_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10485760") {
+
+      // Create test data with DECIMAL types like actual q95 and more rows to trigger partial agg
+      val webSales = (1 to 1000)
+        .flatMap { i =>
+          Seq(
+            (i, 101, 1, 1, 1, BigDecimal(100.50), BigDecimal(50.25)),
+            (i, 101, 1, 1, 2, BigDecimal(150.75), BigDecimal(75.50)))
+        }
+        .toDF(
+          "ws_order_number",
+          "ws_ship_date_sk",
+          "ws_ship_addr_sk",
+          "ws_web_site_sk",
+          "ws_warehouse_sk",
+          "ws_ext_ship_cost",
+          "ws_net_profit")
+
+      val dateDim = Seq((101, "1999-02-01")).toDF("d_date_sk", "d_date")
+
+      val customerAddress = Seq((1, "IL")).toDF("ca_address_sk", "ca_state")
+
+      val webSite = Seq((1, "pri")).toDF("web_site_sk", "web_company_name")
+
+      webSales.createOrReplaceTempView("web_sales")
+      dateDim.createOrReplaceTempView("date_dim")
+      customerAddress.createOrReplaceTempView("customer_address")
+      webSite.createOrReplaceTempView("web_site")
+
+      // Query similar to q95: count(DISTINCT) + sum() with broadcast joins
+      val query = """
+        |WITH ws_wh AS (
+        |  SELECT ws1.ws_order_number, ws1.ws_warehouse_sk wh1, ws2.ws_warehouse_sk wh2
+        |  FROM web_sales ws1, web_sales ws2
+        |  WHERE ws1.ws_order_number = ws2.ws_order_number
+        |    AND ws1.ws_warehouse_sk <> ws2.ws_warehouse_sk
+        |)
+        |SELECT
+        |  count(DISTINCT ws1.ws_order_number) AS order_count,
+        |  sum(ws1.ws_ext_ship_cost) AS total_shipping_cost,
+        |  sum(ws1.ws_net_profit) AS total_net_profit
+        |FROM web_sales ws1, date_dim, customer_address, web_site
+        |WHERE ws1.ws_ship_date_sk = d_date_sk
+        |  AND ws1.ws_ship_addr_sk = ca_address_sk
+        |  AND ca_state = 'IL'
+        |  AND ws1.ws_web_site_sk = web_site_sk
+        |  AND web_company_name = 'pri'
+        |  AND ws1.ws_order_number IN (SELECT ws_order_number FROM ws_wh)
+        |""".stripMargin
+
+      val df = sql(query)
+      checkSparkAnswer(df)
+    }
+  }
+
 }
