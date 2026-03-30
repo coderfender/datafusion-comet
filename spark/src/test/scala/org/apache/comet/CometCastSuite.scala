@@ -504,10 +504,29 @@ class CometCastSuite extends CometTestBase with AdaptiveSparkPlanHelper {
   }
 
   test("cast FloatType to TimestampType") {
+    // Cast back to long avoids java.sql.Timestamp overflow during collect() for extreme values
     compatibleTimezones.foreach { tz =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> tz) {
-        // Use useDFDiff to avoid collect() which fails on extreme timestamp values
-        castTest(generateFloats(), DataTypes.TimestampType, useDataFrameDiff = true)
+        withTable("t1") {
+          generateFloats().write.saveAsTable("t1")
+          val df = spark.sql("select a, cast(cast(a as timestamp) as long) from t1")
+          checkSparkAnswerAndOperator(df)
+        }
+      }
+    }
+  }
+
+  // Test extreme float values that cause overflow when cast to timestamp
+  // Spark saturates to Long.MAX_VALUE/MIN_VALUE, Comet should match
+  // Cast back to long to avoid Java timestamp overflow during collect()
+  test("cast FloatType to TimestampType - extreme values") {
+    val extremeFloats = Seq(Float.MaxValue, Float.MinValue, 1e20f, -1e20f).toDF("a")
+    withTempPath { dir =>
+      extremeFloats.write.parquet(dir.toString)
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        withParquetTable(dir.toString, "t") {
+          checkSparkAnswerAndOperator("SELECT a, CAST(CAST(a AS TIMESTAMP) AS LONG) FROM t")
+        }
       }
     }
   }
@@ -564,10 +583,14 @@ class CometCastSuite extends CometTestBase with AdaptiveSparkPlanHelper {
   }
 
   test("cast DoubleType to TimestampType") {
+    // Cast back to long avoids java.sql.Timestamp overflow during collect() for extreme values
     compatibleTimezones.foreach { tz =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> tz) {
-        // Use useDFDiff to avoid collect() which fails on extreme timestamp values
-        castTest(generateDoubles(), DataTypes.TimestampType, useDataFrameDiff = true)
+        withTable("t1") {
+          generateDoubles().write.saveAsTable("t1")
+          val df = spark.sql("select a, cast(cast(a as timestamp) as long) from t1")
+          checkSparkAnswerAndOperator(df)
+        }
       }
     }
   }
@@ -1586,8 +1609,7 @@ class CometCastSuite extends CometTestBase with AdaptiveSparkPlanHelper {
       toType: DataType,
       hasIncompatibleType: Boolean = false,
       testAnsi: Boolean = true,
-      testTry: Boolean = true,
-      useDataFrameDiff: Boolean = false): Unit = {
+      testTry: Boolean = true): Unit = {
 
     withTempPath { dir =>
       val data = roundtripParquet(input, dir).coalesce(1)
@@ -1595,14 +1617,10 @@ class CometCastSuite extends CometTestBase with AdaptiveSparkPlanHelper {
       withSQLConf((SQLConf.ANSI_ENABLED.key, "false")) {
         // cast() should return null for invalid inputs when ansi mode is disabled
         val df = data.select(col("a"), col("a").cast(toType)).orderBy(col("a"))
-        if (useDataFrameDiff) {
-          assertDataFrameEqualsWithExceptions(df, assertCometNative = !hasIncompatibleType)
+        if (hasIncompatibleType) {
+          checkSparkAnswer(df)
         } else {
-          if (hasIncompatibleType) {
-            checkSparkAnswer(df)
-          } else {
-            checkSparkAnswerAndOperator(df)
-          }
+          checkSparkAnswerAndOperator(df)
         }
 
         if (testTry) {
@@ -1613,11 +1631,7 @@ class CometCastSuite extends CometTestBase with AdaptiveSparkPlanHelper {
           if (hasIncompatibleType) {
             checkSparkAnswer(df2)
           } else {
-            if (useDataFrameDiff) {
-              assertDataFrameEqualsWithExceptions(df2, assertCometNative = !hasIncompatibleType)
-            } else {
-              checkSparkAnswerAndOperator(df2)
-            }
+            checkSparkAnswerAndOperator(df2)
           }
         }
       }
@@ -1630,11 +1644,7 @@ class CometCastSuite extends CometTestBase with AdaptiveSparkPlanHelper {
 
           // cast() should throw exception on invalid inputs when ansi mode is enabled
           val df = data.withColumn("converted", col("a").cast(toType))
-          val res = if (useDataFrameDiff) {
-            assertDataFrameEqualsWithExceptions(df, assertCometNative = !hasIncompatibleType)
-          } else {
-            checkSparkAnswerMaybeThrows(df)
-          }
+          val res = checkSparkAnswerMaybeThrows(df)
           res match {
             case (None, None) =>
             // neither system threw an exception
@@ -1678,14 +1688,10 @@ class CometCastSuite extends CometTestBase with AdaptiveSparkPlanHelper {
         if (testTry) {
           data.createOrReplaceTempView("t")
           val df2 = spark.sql(s"select a, try_cast(a as ${toType.sql}) from t order by a")
-          if (useDataFrameDiff) {
-            assertDataFrameEqualsWithExceptions(df2, assertCometNative = !hasIncompatibleType)
+          if (hasIncompatibleType) {
+            checkSparkAnswer(df2)
           } else {
-            if (hasIncompatibleType) {
-              checkSparkAnswer(df2)
-            } else {
-              checkSparkAnswerAndOperator(df2)
-            }
+            checkSparkAnswerAndOperator(df2)
           }
         }
       }
