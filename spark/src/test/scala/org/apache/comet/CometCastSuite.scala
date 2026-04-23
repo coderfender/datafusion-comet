@@ -505,27 +505,86 @@ class CometCastSuite extends CometTestBase with AdaptiveSparkPlanHelper {
 
   test("cast FloatType to TimestampType") {
     // Cast back to long avoids java.sql.Timestamp overflow during collect() for extreme values
-    compatibleTimezones.foreach { tz =>
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> tz) {
-        withTable("t1") {
-          generateFloats().write.saveAsTable("t1")
-          val df = spark.sql("select a, cast(cast(a as timestamp) as long) from t1")
-          checkSparkAnswerAndOperator(df)
+    Seq(true, false).foreach { ansiEnabled =>
+      compatibleTimezones.foreach { tz =>
+        withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString,
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> tz) {
+          withTable("t1") {
+            generateFloats().write.saveAsTable("t1")
+            val df = spark.sql("select a, cast(cast(a as timestamp) as long) from t1")
+            if (ansiEnabled) {
+              checkSparkAnswerMaybeThrows(df) match {
+                case (None, None) =>
+                // neither system threw an exception
+                case (None, Some(e)) =>
+                  throw e
+                case (Some(e), None) =>
+                  fail(s"Comet should have failed with ${e.getCause.getMessage}")
+                case (Some(sparkException), Some(cometException)) =>
+                  val sparkMessage =
+                    if (sparkException.getCause != null) sparkException.getCause.getMessage
+                    else sparkException.getMessage
+                  val cometMessage =
+                    if (cometException.getCause != null) cometException.getCause.getMessage
+                    else cometException.getMessage
+                  if (CometSparkSessionExtensions.isSpark40Plus) {
+                    assert(sparkMessage.contains("SQLSTATE"))
+                    assert(
+                      sparkMessage.startsWith(
+                        cometMessage.substring(0, math.min(40, cometMessage.length))))
+                  } else {
+                    assert(cometMessage == sparkMessage)
+                  }
+              }
+            } else {
+              checkSparkAnswerAndOperator(df)
+            }
+          }
         }
       }
     }
   }
 
-  // Test extreme float values that cause overflow when cast to timestamp
-  // Spark saturates to Long.MAX_VALUE/MIN_VALUE, Comet should match
   // Cast back to long to avoid Java timestamp overflow during collect()
   test("cast FloatType to TimestampType - extreme values") {
     val extremeFloats = Seq(Float.MaxValue, Float.MinValue, 1e20f, -1e20f).toDF("a")
     withTempPath { dir =>
       extremeFloats.write.parquet(dir.toString)
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
-        withParquetTable(dir.toString, "t") {
-          checkSparkAnswerAndOperator("SELECT a, CAST(CAST(a AS TIMESTAMP) AS LONG) FROM t")
+      Seq(true, false).foreach { ansiEnabled =>
+        withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString,
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+          withParquetTable(dir.toString, "t") {
+            val df = spark.sql("SELECT a, CAST(CAST(a AS TIMESTAMP) AS LONG) FROM t")
+            if (ansiEnabled) {
+              checkSparkAnswerMaybeThrows(df) match {
+                case (None, None) =>
+                // neither system threw an exception
+                case (None, Some(e)) =>
+                  throw e
+                case (Some(e), None) =>
+                  fail(s"Comet should have failed with ${e.getCause.getMessage}")
+                case (Some(sparkException), Some(cometException)) =>
+                  val sparkMessage =
+                    if (sparkException.getCause != null) sparkException.getCause.getMessage
+                    else sparkException.getMessage
+                  val cometMessage =
+                    if (cometException.getCause != null) cometException.getCause.getMessage
+                    else cometException.getMessage
+                  if (CometSparkSessionExtensions.isSpark40Plus) {
+                    assert(sparkMessage.contains("SQLSTATE"))
+                    assert(
+                      sparkMessage.startsWith(
+                        cometMessage.substring(0, math.min(40, cometMessage.length))))
+                  } else {
+                    assert(cometMessage == sparkMessage)
+                  }
+              }
+            } else {
+              checkSparkAnswerAndOperator(df)
+            }
+          }
         }
       }
     }
@@ -584,12 +643,42 @@ class CometCastSuite extends CometTestBase with AdaptiveSparkPlanHelper {
 
   test("cast DoubleType to TimestampType") {
     // Cast back to long avoids java.sql.Timestamp overflow during collect() for extreme values
-    compatibleTimezones.foreach { tz =>
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> tz) {
-        withTable("t1") {
-          generateDoubles().write.saveAsTable("t1")
-          val df = spark.sql("select a, cast(cast(a as timestamp) as long) from t1")
-          checkSparkAnswerAndOperator(df)
+    Seq(true, false).foreach { ansiEnabled =>
+      compatibleTimezones.foreach { tz =>
+        withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString,
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> tz) {
+          withTable("t1") {
+            generateDoubles().write.saveAsTable("t1")
+            val df = spark.sql("select a, cast(cast(a as timestamp) as long) from t1")
+            if (ansiEnabled) {
+              checkSparkAnswerMaybeThrows(df) match {
+                case (None, None) =>
+                // neither system threw an exception
+                case (None, Some(e)) =>
+                  throw e
+                case (Some(e), None) =>
+                  fail(s"Comet should have failed with ${e.getCause.getMessage}")
+                case (Some(sparkException), Some(cometException)) =>
+                  val sparkMessage =
+                    if (sparkException.getCause != null) sparkException.getCause.getMessage
+                    else sparkException.getMessage
+                  val cometMessage =
+                    if (cometException.getCause != null) cometException.getCause.getMessage
+                    else cometException.getMessage
+                  if (CometSparkSessionExtensions.isSpark40Plus) {
+                    assert(sparkMessage.contains("SQLSTATE"))
+                    assert(
+                      sparkMessage.startsWith(
+                        cometMessage.substring(0, math.min(40, cometMessage.length))))
+                  } else {
+                    assert(cometMessage == sparkMessage)
+                  }
+              }
+            } else {
+              checkSparkAnswerAndOperator(df)
+            }
+          }
         }
       }
     }

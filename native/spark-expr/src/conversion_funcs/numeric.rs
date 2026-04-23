@@ -92,7 +92,14 @@ macro_rules! cast_float_to_timestamp_impl {
                             to_type: "TIMESTAMP".to_string(),
                         });
                     }
-                    $builder.append_null();
+                    // Spark saturates: +Inf -> MAX, -Inf -> MIN, NaN -> 0
+                    if val.is_nan() {
+                        $builder.append_value(0);
+                    } else if val.is_sign_positive() {
+                        $builder.append_value(i64::MAX);
+                    } else {
+                        $builder.append_value(i64::MIN);
+                    }
                 } else {
                     // Path 2: Multiply then check overflow - error says BIGINT
                     let micros = val * MICROS_PER_SECOND as f64;
@@ -117,7 +124,12 @@ macro_rules! cast_float_to_timestamp_impl {
                                 to_type: "BIGINT".to_string(),
                             });
                         }
-                        $builder.append_null();
+                        // Spark saturates to MAX/MIN for overflow
+                        if micros.is_sign_positive() {
+                            $builder.append_value(i64::MAX);
+                        } else {
+                            $builder.append_value(i64::MIN);
+                        }
                     }
                 }
             }
